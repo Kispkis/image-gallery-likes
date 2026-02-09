@@ -30,7 +30,7 @@ Aplicacao web responsiva com sistema de login para administradores, upload de im
    - `/admin/dashboard` - Painel do administrador (apos login)
 
 
-ATENÇÃO: ao alterar o utilizador ou a senha durante testes, e necessario repor as credenciais originais antes de fechar a aplicacao.
+ATENÇÃO: ao alterar o utilizador e/ou a senha durante testes, é necessário repor as credenciais originais antes de fechar a aplicação.
 ---
 
 ## Testar Localmente (CMD)
