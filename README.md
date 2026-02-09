@@ -29,7 +29,7 @@ Aplicacao web responsiva com sistema de login para administradores, upload de im
    - `/admin` - Login de administrador
    - `/admin/dashboard` - Painel do administrador (apos login)
 
-O banco de dados PostgreSQL ja esta configurado automaticamente no Replit.
+
 ATENÇÃO: ao alterar o utilizador ou a senha durante testes, e necessario repor as credenciais originais antes de fechar a aplicacao.
 ---
 
