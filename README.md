@@ -22,16 +22,15 @@ Aplicacao web responsiva com sistema de login para administradores, upload de im
 
 ## Testar Online (Replit)
 
-1. Abra o projeto no Replit
-2. Clique no botao **Run** (ou aguarde o workflow "Start application" iniciar automaticamente)
-3. O aplicativo vai abrir no navegador do Replit
-4. Acesse as paginas:
+1. Acesse: https://image-gallery-likes.replit.app/
+2. O aplicativo vai abrir no navegador do Replit
+3. Acesse as paginas:
    - `/` - Galeria publica (ver imagens e dar likes)
    - `/admin` - Login de administrador
    - `/admin/dashboard` - Painel do administrador (apos login)
 
 O banco de dados PostgreSQL ja esta configurado automaticamente no Replit.
-
+ATENÇÃO: ao alterar o utilizador ou a senha durante testes, e necessario repor as credenciais originais antes de fechar a aplicacao.
 ---
 
 ## Testar Localmente (CMD)
