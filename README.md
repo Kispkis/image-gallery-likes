@@ -22,7 +22,7 @@ Aplicacao web responsiva com sistema de login para administradores, upload de im
 
 ## Testar Online (Replit)
 
-1. Acesse: https://image-gallery-likes.replit.app/
+1. Acesse: https://image-gallery-likes-2.replit.app/
 2. O aplicativo vai abrir no navegador do Replit
 3. Acesse as paginas:
    - `/` - Galeria publica (ver imagens e dar likes)
