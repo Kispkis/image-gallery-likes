@@ -1,0 +1,28 @@
+=== RELATORIO DIARIO - 2026-02-12 ===
+Gerado em: 2026-02-12 16:27:54
+
+--- ADMINISTRADORES ---
+  Username: admin2 | Funcao: admin | Foto: profile-1770635940124-918142630.jpeg
+  Username: admin3 | Funcao: admin | Foto: Sem foto
+  Username: master | Funcao: master | Foto: profile-1770635907990-872818561.jpeg
+  Total: 3 administradores
+
+--- IMAGENS ---
+  ID: 3dc56819-b35e-4ca1-a3c4-9f1d8c3bd55f | Nome: aurora_boreau.jpeg | Tamanho: 5.7KB | Likes: 2 | Enviada por: admin2 | Data: 09/02/2026, 09:03:08
+  ID: 83f429e7-889e-4f25-b308-516a8a2ab5a1 | Nome: passaro_pier.jpeg | Tamanho: 7.6KB | Likes: 0 | Enviada por: admin2 | Data: 09/02/2026, 09:03:17
+  ID: 223aba0f-6ff4-4d31-8bc1-013c06466ac5 | Nome: gato.jpeg | Tamanho: 14.0KB | Likes: 1 | Enviada por: admin2 | Data: 09/02/2026, 09:03:23
+  ID: 90e6ec92-5341-484f-99b2-3fe6daf52c72 | Nome: doca_pier.jpeg | Tamanho: 5.8KB | Likes: 0 | Enviada por: admin2 | Data: 09/02/2026, 09:03:28
+  ID: 80d71dd7-0dc4-4fce-824f-38e22c0680b5 | Nome: hamster.jpeg | Tamanho: 11.2KB | Likes: 0 | Enviada por: master | Data: 09/02/2026, 09:07:45
+  ID: 581cacd4-9a1d-4f47-a66b-98ab42c83b52 | Nome: lago.jpeg | Tamanho: 11.7KB | Likes: 0 | Enviada por: master | Data: 09/02/2026, 09:07:52
+  ID: 6271f10b-a9e7-4afd-9f97-62c420f50221 | Nome: cardinais.jpeg | Tamanho: 8.4KB | Likes: 0 | Enviada por: master | Data: 09/02/2026, 09:07:58
+  ID: 829c7bc4-897a-4637-8385-a4736444ab6a | Nome: montanha.jpeg | Tamanho: 6.8KB | Likes: 0 | Enviada por: master | Data: 09/02/2026, 09:08:06
+  ID: 41db48e2-3cd9-48b5-9520-af34592d6f51 | Nome: pedras_mar.jpeg | Tamanho: 12.4KB | Likes: 0 | Enviada por: master | Data: 09/02/2026, 09:08:18
+  Total: 9 imagens
+
+--- LIKES ---
+  Email: joao@gmail.com | Imagem: aurora_boreau.jpeg | Data: 09/02/2026, 09:08:42
+  Email: rafa@gmail.com | Imagem: gato.jpeg | Data: 09/02/2026, 09:09:11
+  Email: mat@gmail.com | Imagem: aurora_boreau.jpeg | Data: 09/02/2026, 10:47:20
+  Total: 3 likes
+
+=== FIM DO RELATORIO ===

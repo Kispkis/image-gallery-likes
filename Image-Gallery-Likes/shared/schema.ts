@@ -7,6 +7,8 @@ export const admins = pgTable("admins", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  profilePicture: text("profile_picture"),
+  role: text("role").notNull().default("admin"),
 });
 
 export const insertAdminSchema = createInsertSchema(admins).pick({
@@ -16,6 +18,14 @@ export const insertAdminSchema = createInsertSchema(admins).pick({
 
 export type InsertAdmin = z.infer<typeof insertAdminSchema>;
 export type Admin = typeof admins.$inferSelect;
+
+export const updateProfileSchema = z.object({
+  username: z.string().min(1, "Username obrigatorio").optional(),
+  currentPassword: z.string().optional(),
+  newPassword: z.string().min(4, "Senha deve ter pelo menos 4 caracteres").optional(),
+});
+
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 
 export const images = pgTable("images", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -68,4 +78,11 @@ export const likeFormSchema = z.object({
 
 export type LikeFormInput = z.infer<typeof likeFormSchema>;
 
-export type ImageWithLikes = Image & { likeCount: number; likedByEmails?: string[] };
+export type ImageWithLikes = Image & { likeCount: number; likedByEmails?: string[]; uploaderUsername?: string; uploaderProfilePicture?: string | null };
+
+export const createAdminSchema = z.object({
+  username: z.string().min(1, "Username obrigatorio"),
+  password: z.string().min(4, "Senha deve ter pelo menos 4 caracteres"),
+});
+
+export type CreateAdminInput = z.infer<typeof createAdminSchema>;

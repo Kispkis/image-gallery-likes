@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { eq, and, sql, count } from "drizzle-orm";
+import { eq, and, sql, count, ne } from "drizzle-orm";
 import {
   admins, images, likes,
   type Admin, type InsertAdmin,
@@ -16,8 +16,11 @@ export const db = drizzle(pool);
 export interface IStorage {
   getAdminByUsername(username: string): Promise<Admin | undefined>;
   getAdminById(id: string): Promise<Admin | undefined>;
-  createAdmin(admin: InsertAdmin): Promise<Admin>;
+  createAdmin(admin: InsertAdmin & { role?: string }): Promise<Admin>;
   getAdminCount(): Promise<number>;
+  getAllAdmins(): Promise<Admin[]>;
+  updateAdmin(id: string, data: Partial<{ username: string; password: string; profilePicture: string | null; role: string }>): Promise<Admin | undefined>;
+  deleteAdmin(id: string): Promise<void>;
 
   createImage(image: InsertImage): Promise<Image>;
   getImages(): Promise<ImageWithLikes[]>;
@@ -28,6 +31,9 @@ export interface IStorage {
   getLikeByEmail(email: string): Promise<Like | undefined>;
   getLikeByImageAndEmail(imageId: string, email: string): Promise<Like | undefined>;
   getLikesByImageId(imageId: string): Promise<Like[]>;
+  getAllLikes(): Promise<Like[]>;
+  deleteLike(id: string): Promise<void>;
+  swapLike(likeId: string, newImageId: string): Promise<Like | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -41,7 +47,7 @@ export class DatabaseStorage implements IStorage {
     return admin;
   }
 
-  async createAdmin(admin: InsertAdmin): Promise<Admin> {
+  async createAdmin(admin: InsertAdmin & { role?: string }): Promise<Admin> {
     const hashedPassword = await bcrypt.hash(admin.password, 10);
     const [created] = await db.insert(admins).values({ ...admin, password: hashedPassword }).returning();
     return created;
@@ -50,6 +56,27 @@ export class DatabaseStorage implements IStorage {
   async getAdminCount(): Promise<number> {
     const [result] = await db.select({ count: count() }).from(admins);
     return result.count;
+  }
+
+  async getAllAdmins(): Promise<Admin[]> {
+    return await db.select().from(admins).orderBy(admins.username);
+  }
+
+  async updateAdmin(id: string, data: Partial<{ username: string; password: string; profilePicture: string | null; role: string }>): Promise<Admin | undefined> {
+    const updateData: Record<string, any> = {};
+    if (data.username !== undefined) updateData.username = data.username;
+    if (data.password !== undefined) updateData.password = await bcrypt.hash(data.password, 10);
+    if (data.profilePicture !== undefined) updateData.profilePicture = data.profilePicture;
+    if (data.role !== undefined) updateData.role = data.role;
+
+    if (Object.keys(updateData).length === 0) return this.getAdminById(id);
+
+    const [updated] = await db.update(admins).set(updateData).where(eq(admins.id, id)).returning();
+    return updated;
+  }
+
+  async deleteAdmin(id: string): Promise<void> {
+    await db.delete(admins).where(eq(admins.id, id));
   }
 
   async createImage(image: InsertImage): Promise<Image> {
@@ -63,7 +90,13 @@ export class DatabaseStorage implements IStorage {
 
     for (const img of allImages) {
       const [likeResult] = await db.select({ count: count() }).from(likes).where(eq(likes.imageId, img.id));
-      result.push({ ...img, likeCount: likeResult.count });
+      const admin = await this.getAdminById(img.uploadedBy);
+      result.push({
+        ...img,
+        likeCount: likeResult.count,
+        uploaderUsername: admin?.username,
+        uploaderProfilePicture: admin?.profilePicture,
+      });
     }
 
     return result;
@@ -98,6 +131,22 @@ export class DatabaseStorage implements IStorage {
 
   async getLikesByImageId(imageId: string): Promise<Like[]> {
     return await db.select().from(likes).where(eq(likes.imageId, imageId)).orderBy(likes.createdAt);
+  }
+
+  async getAllLikes(): Promise<Like[]> {
+    return await db.select().from(likes).orderBy(likes.createdAt);
+  }
+
+  async deleteLike(id: string): Promise<void> {
+    await db.delete(likes).where(eq(likes.id, id));
+  }
+
+  async swapLike(likeId: string, newImageId: string): Promise<Like | undefined> {
+    const [updated] = await db.update(likes)
+      .set({ imageId: newImageId, createdAt: new Date() })
+      .where(eq(likes.id, likeId))
+      .returning();
+    return updated;
   }
 }
 

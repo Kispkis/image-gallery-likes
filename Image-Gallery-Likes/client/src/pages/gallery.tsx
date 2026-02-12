@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
-import { Heart, Camera, X } from "lucide-react";
+import { Heart, Camera, X, Grid3X3, TrendingUp, ArrowLeftRight } from "lucide-react";
 import { Link } from "wouter";
 import type { ImageWithLikes } from "@shared/schema";
 
@@ -15,14 +16,30 @@ function ImageSkeleton() {
   return (
     <Card className="overflow-visible">
       <CardContent className="p-0">
-        <Skeleton className="w-full aspect-square rounded-t-md" />
+        <div className="flex items-center flex-wrap gap-3 p-3">
+          <Skeleton className="h-9 w-9 rounded-full" />
+          <Skeleton className="h-4 w-24" />
+        </div>
+        <Skeleton className="w-full aspect-square" />
         <div className="p-3 space-y-2">
-          <Skeleton className="h-4 w-3/4" />
-          <Skeleton className="h-8 w-24" />
+          <Skeleton className="h-4 w-20" />
+          <Skeleton className="h-3 w-32" />
         </div>
       </CardContent>
     </Card>
   );
+}
+
+function formatTimeAgo(date: Date): string {
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (seconds < 60) return "agora";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d`;
+  return date.toLocaleDateString("pt-PT", { day: "numeric", month: "short" });
 }
 
 export default function Gallery() {
@@ -31,27 +48,55 @@ export default function Gallery() {
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [lightboxImage, setLightboxImage] = useState<ImageWithLikes | null>(null);
+  const [swapDialog, setSwapDialog] = useState<{
+    likeId: string;
+    imageId: string;
+    imageName: string;
+    targetImageId: string;
+    email: string;
+  } | null>(null);
 
   const { data: images, isLoading } = useQuery<ImageWithLikes[]>({
     queryKey: ["/api/images"],
   });
 
   const likeMutation = useMutation({
-    mutationFn: async ({ imageId, email }: { imageId: string; email: string }) => {
-      const res = await apiRequest("POST", `/api/images/${imageId}/like`, { email });
+    mutationFn: async ({ imageId, email, swap }: { imageId: string; email: string; swap?: boolean }) => {
+      const res = await apiRequest("POST", `/api/images/${imageId}/like`, { email, swap });
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/images"] });
       setLikeDialogOpen(false);
+      setSwapDialog(null);
       setEmail("");
       setSelectedImageId(null);
       toast({ title: "Like registado!", description: "O seu like foi registado com sucesso." });
     },
-    onError: (error: Error) => {
-      const msg = error.message;
-      if (msg.includes("ja deu like") || msg.includes("already liked")) {
-        toast({ title: "Ja deu like", description: "Este email ja deu like. Cada email so pode dar 1 like.", variant: "destructive" });
+    onError: async (error: any) => {
+      const msg = error.message || "";
+      try {
+        const jsonStr = msg.replace(/^\d+:\s*/, "");
+        const data = JSON.parse(jsonStr);
+        if (data.existingLike) {
+          setLikeDialogOpen(false);
+          setSwapDialog({
+            likeId: data.existingLike.likeId,
+            imageId: data.existingLike.imageId,
+            imageName: data.existingLike.imageName,
+            targetImageId: selectedImageId!,
+            email: email,
+          });
+          return;
+        }
+        if (data.message?.includes("Ja deu like nesta")) {
+          toast({ title: "Ja deu like", description: "Ja deu like nesta imagem.", variant: "destructive" });
+          return;
+        }
+      } catch {}
+
+      if (msg.includes("ja tem like") || msg.includes("ja deu like") || msg.includes("already liked")) {
+        toast({ title: "Ja deu like", description: "Ja deu like nesta imagem.", variant: "destructive" });
       } else if (msg.includes("deve conter @") || msg.includes("Invalid email")) {
         toast({ title: "Email invalido", description: "O email deve conter @", variant: "destructive" });
       } else {
@@ -71,78 +116,120 @@ export default function Gallery() {
     likeMutation.mutate({ imageId: selectedImageId, email });
   };
 
+  const handleSwapConfirm = () => {
+    if (!swapDialog) return;
+    likeMutation.mutate({ imageId: swapDialog.targetImageId, email: swapDialog.email, swap: true });
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 px-4 py-3 sm:px-6 sm:py-4">
-          <div className="flex items-center gap-2">
+        <div className="max-w-lg mx-auto flex items-center justify-between gap-2 px-4 py-3">
+          <div className="flex items-center flex-wrap gap-2">
             <Camera className="h-6 w-6 text-primary" />
-            <h1 className="text-xl font-bold sm:text-2xl">Galeria</h1>
+            <h1 className="text-xl font-bold tracking-tight" data-testid="text-gallery-title">Galeria</h1>
           </div>
           <Link href="/admin" data-testid="link-admin">
-            <Button variant="outline" size="sm" data-testid="button-admin-login">
+            <Button variant="ghost" size="sm" data-testid="button-admin-login">
               Admin
             </Button>
           </Link>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-6 sm:px-6 sm:py-8">
+      <div className="max-w-lg mx-auto border-x min-h-[calc(100vh-53px)]">
+        <div className="flex items-center flex-wrap gap-3 px-4 py-3 border-b">
+          <TrendingUp className="h-4 w-4 text-primary" />
+          <span className="text-sm font-medium text-muted-foreground" data-testid="text-feed-label">Feed</span>
+          <div className="flex-1" />
+          <div className="flex items-center flex-wrap gap-1">
+            <Grid3X3 className="h-4 w-4 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground" data-testid="text-photo-count">{images?.length ?? 0} fotos</span>
+          </div>
+        </div>
+
         {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {Array.from({ length: 8 }).map((_, i) => (
+          <div className="space-y-4 p-0">
+            {Array.from({ length: 3 }).map((_, i) => (
               <ImageSkeleton key={i} />
             ))}
           </div>
         ) : !images || images.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <Camera className="h-16 w-16 text-muted-foreground/40 mb-4" />
-            <h2 className="text-xl font-semibold text-muted-foreground mb-2">
-              Nenhuma imagem disponivel
+          <div className="flex flex-col items-center justify-center py-24 text-center px-4">
+            <div className="h-20 w-20 rounded-full bg-muted flex items-center justify-center mb-5">
+              <Camera className="h-10 w-10 text-muted-foreground" />
+            </div>
+            <h2 className="text-lg font-semibold mb-1">
+              Nenhuma publicacao ainda
             </h2>
-            <p className="text-sm text-muted-foreground">
-              As imagens aparecerão aqui assim que forem adicionadas.
+            <p className="text-sm text-muted-foreground max-w-xs">
+              As imagens aparecerão aqui assim que forem adicionadas pelos administradores.
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div className="divide-y">
             {images.map((image) => (
-              <Card key={image.id} className="overflow-visible group" data-testid={`card-image-${image.id}`}>
-                <CardContent className="p-0">
-                  <div
-                    className="relative cursor-pointer"
-                    onClick={() => setLightboxImage(image)}
-                    data-testid={`image-click-${image.id}`}
-                  >
-                    <img
-                      src={`/uploads/${image.filename}`}
-                      alt={image.originalName}
-                      className="w-full aspect-square object-cover rounded-t-md"
-                      loading="lazy"
-                      data-testid={`img-${image.id}`}
-                    />
-                  </div>
-                  <div className="p-3 flex items-center justify-between gap-2 flex-wrap">
-                    <p className="text-sm text-muted-foreground truncate max-w-[60%]" data-testid={`text-image-name-${image.id}`}>
-                      {image.originalName}
+              <div key={image.id} data-testid={`card-image-${image.id}`}>
+                <div className="flex items-center flex-wrap gap-3 px-4 py-3">
+                  <Avatar className="h-9 w-9">
+                    {image.uploaderProfilePicture && (
+                      <AvatarImage src={`/uploads/${image.uploaderProfilePicture}`} alt={image.uploaderUsername || "admin"} />
+                    )}
+                    <AvatarFallback className="text-xs bg-primary/10 text-primary font-semibold">
+                      {(image.uploaderUsername || "A").charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate" data-testid={`text-image-author-${image.id}`}>
+                      {image.uploaderUsername || "admin"}
                     </p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatTimeAgo(new Date(image.createdAt))}
+                    </p>
+                  </div>
+                </div>
+
+                <div
+                  className="relative cursor-pointer bg-muted/30"
+                  onClick={() => setLightboxImage(image)}
+                  data-testid={`image-click-${image.id}`}
+                >
+                  <img
+                    src={`/uploads/${image.filename}`}
+                    alt={image.originalName}
+                    className="w-full aspect-square object-cover"
+                    loading="lazy"
+                    data-testid={`img-${image.id}`}
+                  />
+                </div>
+
+                <div className="px-4 py-2">
+                  <div className="flex items-center flex-wrap gap-1">
                     <Button
                       variant="ghost"
-                      size="sm"
-                      className="flex items-center gap-1"
+                      size="icon"
                       onClick={() => handleLikeClick(image.id)}
                       data-testid={`button-like-${image.id}`}
                     >
-                      <Heart className="h-4 w-4" />
-                      <span data-testid={`text-like-count-${image.id}`}>{image.likeCount}</span>
+                      <Heart className="h-5 w-5" />
                     </Button>
                   </div>
-                </CardContent>
-              </Card>
+                  <p className="text-sm font-semibold mt-1" data-testid={`text-like-count-${image.id}`}>
+                    {image.likeCount} {image.likeCount === 1 ? "like" : "likes"}
+                  </p>
+                  <p className="text-sm mt-1">
+                    <span className="font-semibold">{image.uploaderUsername || "admin"}</span>{" "}
+                    <span className="text-muted-foreground" data-testid={`text-image-name-${image.id}`}>{image.originalName}</span>
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-1 uppercase tracking-wide">
+                    {new Date(image.createdAt).toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric" })}
+                  </p>
+                </div>
+              </div>
             ))}
           </div>
         )}
-      </main>
+      </div>
 
       <Dialog open={likeDialogOpen} onOpenChange={setLikeDialogOpen}>
         <DialogContent>
@@ -182,6 +269,36 @@ export default function Gallery() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={!!swapDialog} onOpenChange={() => setSwapDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ArrowLeftRight className="h-4 w-4" />
+              Trocar Like
+            </DialogTitle>
+            <DialogDescription>
+              Este email ja deu like na imagem "{swapDialog?.imageName}". Deseja trocar o like para esta nova imagem?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              onClick={() => setSwapDialog(null)}
+              data-testid="button-cancel-swap"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleSwapConfirm}
+              disabled={likeMutation.isPending}
+              data-testid="button-confirm-swap"
+            >
+              {likeMutation.isPending ? "A trocar..." : "Trocar Like"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!lightboxImage} onOpenChange={() => setLightboxImage(null)}>
         <DialogContent className="max-w-3xl p-0 overflow-hidden">
           <DialogHeader className="sr-only">
@@ -191,7 +308,7 @@ export default function Gallery() {
           {lightboxImage && (
             <div className="relative">
               <Button
-                variant="ghost"
+                variant="outline"
                 size="icon"
                 className="absolute top-2 right-2 z-10 bg-background/80 backdrop-blur"
                 onClick={() => setLightboxImage(null)}
@@ -205,7 +322,7 @@ export default function Gallery() {
                 className="w-full h-auto max-h-[80vh] object-contain"
                 data-testid="img-lightbox"
               />
-              <div className="p-4 flex items-center justify-between gap-2 flex-wrap">
+              <div className="p-4 flex items-center justify-between gap-3 flex-wrap">
                 <div>
                   <p className="font-medium" data-testid="text-lightbox-name">{lightboxImage.originalName}</p>
                   <p className="text-sm text-muted-foreground">

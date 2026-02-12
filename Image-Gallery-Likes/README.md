@@ -1,22 +1,24 @@
 # Galeria de Imagens
 
-Aplicacao web responsiva com sistema de login para administradores, upload de imagens JPEG (maximo 200KB) e galeria publica com sistema de likes por email.
+Aplicacao web responsiva com sistema de login para administradores (master e admin), upload de imagens JPEG (maximo 200KB) e galeria publica com sistema de likes por email.
 
 ---
 
 ## Funcionalidades
 
-- **Galeria Publica**: Qualquer pessoa pode visualizar as imagens
-- **Sistema de Likes**: Usuarios podem dar like usando um email Gmail (cada email so pode dar 1 like no total)
-- **Painel Admin**: Upload de imagens, visualizacao de likes e gestao de imagens
-- **Autenticacao**: Login com sessao segura para administradores
+- **Galeria Publica**: Qualquer pessoa pode visualizar as imagens no formato feed social
+- **Sistema de Likes**: Usuarios podem dar like usando um email com @ (cada email so pode dar 1 like no total, com opcao de trocar)
+- **Admin Master**: Dashboard completa com analytics, graficos, gestao de admins, likes, e relatorios diarios
+- **Admins Regulares**: Dashboard simplificada para upload e eliminacao de imagens
+- **Perfil Admin**: Todos os admins podem alterar username, senha e foto de perfil
+- **Relatorios**: Exportacao automatica diaria (23:59:58) para a pasta data/
 
 ## Credenciais de Admin
 
-| Usuario | Senha    |
-|---------|----------|
-| admin1  | admin123 |
-| admin2  | admin456 |
+| Usuario | Senha    | Funcao |
+|---------|----------|--------|
+| admin1  | admin123 | Master |
+| admin2  | admin456 | Admin  |
 
 ---
 
@@ -103,11 +105,11 @@ http://localhost:5000
 
 ## Paginas
 
-| Pagina              | Caminho            | Descricao                          |
-|---------------------|--------------------|------------------------------------|
-| Galeria Publica     | `/`                | Ver imagens e dar likes            |
-| Login Admin         | `/admin`           | Entrar como administrador          |
-| Painel Admin        | `/admin/dashboard` | Upload, gestao e likes das imagens |
+| Pagina              | Caminho            | Descricao                                       |
+|---------------------|--------------------|-------------------------------------------------|
+| Galeria Publica     | `/`                | Ver imagens e dar likes                         |
+| Login Admin         | `/admin`           | Entrar como administrador                       |
+| Painel Admin        | `/admin/dashboard` | Dashboard (conteudo varia conforme funcao)      |
 
 ---
 
@@ -115,9 +117,13 @@ http://localhost:5000
 
 - Apenas imagens JPEG sao aceites no upload
 - Tamanho maximo por imagem: 200KB
-- Likes requerem um email que termine com `@gmail.com`
+- Likes requerem um email que contenha @
 - Cada email so pode dar 1 like no total (independente da imagem)
+- Se o email ja deu like noutra imagem, e oferecida a opcao de trocar o like
 - Data e hora de cada like sao registadas automaticamente
+- Relatorios diarios sao gerados automaticamente as 23:59:58 e guardados na pasta data/
+
+> **Aviso importante para testes:** Se alterar o nome de utilizador ou a senha de um administrador durante os testes, certifique-se de que volta a repor as credenciais originais antes de fechar a aplicacao. Caso contrario, nao conseguira fazer login com as credenciais indicadas acima.
 
 ---
 
@@ -127,3 +133,4 @@ http://localhost:5000
 - **Backend**: Express.js, express-session
 - **Banco de Dados**: PostgreSQL com Drizzle ORM
 - **Armazenamento**: Sistema de arquivos local (pasta uploads/)
+- **Exportacao de Dados**: Ficheiros texto na pasta data/

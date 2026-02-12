@@ -1,4 +1,4 @@
-import type { Express, Request, Response, NextFunction } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import session from "express-session";
@@ -7,7 +7,7 @@ import path from "path";
 import fs from "fs";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
-import { loginSchema } from "@shared/schema";
+import { loginSchema, updateProfileSchema, createAdminSchema } from "@shared/schema";
 
 declare module "express-session" {
   interface SessionData {
@@ -18,6 +18,11 @@ declare module "express-session" {
 const UPLOAD_DIR = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
+
+const DATA_DIR = path.join(process.cwd(), "data");
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
 const upload = multer({
@@ -39,6 +44,25 @@ const upload = multer({
   },
 });
 
+const profileUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
+    filename: (_req, file, cb) => {
+      const uniqueSuffix = "profile-" + Date.now() + "-" + Math.round(Math.random() * 1e9);
+      const ext = path.extname(file.originalname);
+      cb(null, uniqueSuffix + ext);
+    },
+  }),
+  limits: { fileSize: 200 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) {
+      cb(null, true);
+    } else {
+      cb(new Error("Apenas ficheiros de imagem sao permitidos."));
+    }
+  },
+});
+
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
   if (!req.session.adminId) {
     return res.status(401).json({ message: "Nao autenticado" });
@@ -46,13 +70,89 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+async function requireMaster(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.adminId) {
+    return res.status(401).json({ message: "Nao autenticado" });
+  }
+  const admin = await storage.getAdminById(req.session.adminId);
+  if (!admin || admin.role !== "master") {
+    return res.status(403).json({ message: "Acesso restrito ao admin master" });
+  }
+  next();
+}
+
 async function seedAdmins() {
   const count = await storage.getAdminCount();
   if (count === 0) {
-    await storage.createAdmin({ username: "admin1", password: "admin123" });
-    await storage.createAdmin({ username: "admin2", password: "admin456" });
-    console.log("Seed: 2 admin users created");
+    await storage.createAdmin({ username: "admin1", password: "admin123", role: "master" });
+    await storage.createAdmin({ username: "admin2", password: "admin456", role: "admin" });
+    console.log("Seed: 2 admin users created (admin1=master, admin2=admin)");
   }
+}
+
+async function generateDailyReport() {
+  const now = new Date();
+  const dateStr = now.toISOString().split("T")[0];
+  const timeStr = now.toLocaleTimeString("pt-PT");
+
+  const allAdmins = await storage.getAllAdmins();
+  const allImages = await storage.getImages();
+  const allLikes = await storage.getAllLikes();
+
+  let report = `=== RELATORIO DIARIO - ${dateStr} ===\n`;
+  report += `Gerado em: ${dateStr} ${timeStr}\n\n`;
+
+  report += `--- ADMINISTRADORES ---\n`;
+  for (const admin of allAdmins) {
+    report += `  Username: ${admin.username} | Funcao: ${admin.role} | Foto: ${admin.profilePicture || "Sem foto"}\n`;
+  }
+  report += `  Total: ${allAdmins.length} administradores\n\n`;
+
+  report += `--- IMAGENS ---\n`;
+  for (const img of allImages) {
+    report += `  ID: ${img.id} | Nome: ${img.originalName} | Tamanho: ${(img.size / 1024).toFixed(1)}KB | Likes: ${img.likeCount} | Enviada por: ${img.uploaderUsername || "desconhecido"} | Data: ${new Date(img.createdAt).toLocaleString("pt-PT")}\n`;
+  }
+  report += `  Total: ${allImages.length} imagens\n\n`;
+
+  report += `--- LIKES ---\n`;
+  for (const like of allLikes) {
+    const img = allImages.find(i => i.id === like.imageId);
+    report += `  Email: ${like.email} | Imagem: ${img?.originalName || like.imageId} | Data: ${new Date(like.createdAt).toLocaleString("pt-PT")}\n`;
+  }
+  report += `  Total: ${allLikes.length} likes\n\n`;
+
+  report += `=== FIM DO RELATORIO ===\n`;
+
+  const filename = `relatorio_${dateStr}.txt`;
+  const filePath = path.join(DATA_DIR, filename);
+  fs.writeFileSync(filePath, report, "utf-8");
+  console.log(`Daily report saved: ${filePath}`);
+}
+
+function scheduleDailyExport() {
+  const scheduleNext = () => {
+    const now = new Date();
+    const target = new Date(now);
+    target.setHours(23, 59, 58, 0);
+
+    if (now >= target) {
+      target.setDate(target.getDate() + 1);
+    }
+
+    const delay = target.getTime() - now.getTime();
+    console.log(`Next daily report scheduled for: ${target.toLocaleString("pt-PT")} (in ${Math.round(delay / 1000 / 60)} minutes)`);
+
+    setTimeout(async () => {
+      try {
+        await generateDailyReport();
+      } catch (err) {
+        console.error("Error generating daily report:", err);
+      }
+      scheduleNext();
+    }, delay);
+  };
+
+  scheduleNext();
 }
 
 export async function registerRoutes(
@@ -84,20 +184,22 @@ export async function registerRoutes(
     })
   );
 
-  app.use("/uploads", (req, res, next) => {
-    const filePath = path.join(UPLOAD_DIR, path.basename(req.path));
-    if (fs.existsSync(filePath)) {
-      res.sendFile(filePath);
-    } else {
-      res.status(404).json({ message: "File not found" });
-    }
-  });
+  app.use("/uploads", express.static(UPLOAD_DIR, {
+    maxAge: "1d",
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith(".jpeg") || filePath.endsWith(".jpg")) {
+        res.setHeader("Content-Type", "image/jpeg");
+      }
+    },
+  }));
 
   try {
     await seedAdmins();
   } catch (err) {
     console.error("Database seed error:", err);
   }
+
+  scheduleDailyExport();
 
   // Auth routes
   app.post("/api/auth/login", async (req, res) => {
@@ -115,7 +217,7 @@ export async function registerRoutes(
       }
 
       req.session.adminId = admin.id;
-      res.json({ admin: { id: admin.id, username: admin.username } });
+      res.json({ admin: { id: admin.id, username: admin.username, profilePicture: admin.profilePicture, role: admin.role } });
     } catch (err) {
       res.status(400).json({ message: "Dados invalidos" });
     }
@@ -129,7 +231,7 @@ export async function registerRoutes(
     if (!admin) {
       return res.status(401).json({ message: "Admin nao encontrado" });
     }
-    res.json({ admin: { id: admin.id, username: admin.username } });
+    res.json({ admin: { id: admin.id, username: admin.username, profilePicture: admin.profilePicture, role: admin.role } });
   });
 
   app.post("/api/auth/logout", (req, res) => {
@@ -144,14 +246,15 @@ export async function registerRoutes(
     res.json(imgs);
   });
 
-  // Public like
+  // Public like - with swap support
   app.post("/api/images/:id/like", async (req, res) => {
     try {
       const { id } = req.params;
       const emailSchema = z.object({
         email: z.string().includes("@", { message: "O email deve conter @" }),
+        swap: z.boolean().optional(),
       });
-      const { email } = emailSchema.parse(req.body);
+      const { email, swap } = emailSchema.parse(req.body);
 
       const image = await storage.getImageById(id);
       if (!image) {
@@ -160,7 +263,24 @@ export async function registerRoutes(
 
       const existingLike = await storage.getLikeByEmail(email);
       if (existingLike) {
-        return res.status(409).json({ message: "Este email ja deu like. Cada email so pode dar 1 like." });
+        if (existingLike.imageId === id) {
+          return res.status(409).json({ message: "Ja deu like nesta imagem." });
+        }
+
+        if (!swap) {
+          const existingImage = await storage.getImageById(existingLike.imageId);
+          return res.status(409).json({
+            message: "Este email ja tem like noutra imagem.",
+            existingLike: {
+              likeId: existingLike.id,
+              imageId: existingLike.imageId,
+              imageName: existingImage?.originalName || "imagem desconhecida",
+            },
+          });
+        }
+
+        const swapped = await storage.swapLike(existingLike.id, id);
+        return res.json(swapped);
       }
 
       const like = await storage.createLike({ imageId: id, email });
@@ -216,6 +336,99 @@ export async function registerRoutes(
     });
   });
 
+  app.put("/api/admin/profile", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const adminId = req.session.adminId!;
+      const data = updateProfileSchema.parse(req.body);
+      const admin = await storage.getAdminById(adminId);
+      if (!admin) {
+        return res.status(404).json({ message: "Admin nao encontrado" });
+      }
+
+      const updateData: Partial<{ username: string; password: string; profilePicture: string | null }> = {};
+
+      if (data.username && data.username !== admin.username) {
+        const existing = await storage.getAdminByUsername(data.username);
+        if (existing && existing.id !== adminId) {
+          return res.status(409).json({ message: "Este nome de usuario ja esta em uso" });
+        }
+        updateData.username = data.username;
+      }
+
+      if (data.newPassword) {
+        if (!data.currentPassword) {
+          return res.status(400).json({ message: "Senha atual obrigatoria para alterar a senha" });
+        }
+        const validPassword = await bcrypt.compare(data.currentPassword, admin.password);
+        if (!validPassword) {
+          return res.status(401).json({ message: "Senha atual incorreta" });
+        }
+        updateData.password = data.newPassword;
+      }
+
+      const updated = await storage.updateAdmin(adminId, updateData);
+      if (!updated) {
+        return res.status(500).json({ message: "Erro ao atualizar perfil" });
+      }
+
+      res.json({ admin: { id: updated.id, username: updated.username, profilePicture: updated.profilePicture, role: updated.role } });
+    } catch (err: any) {
+      if (err.issues) {
+        return res.status(400).json({ message: err.issues[0]?.message || "Dados invalidos" });
+      }
+      res.status(500).json({ message: "Erro interno" });
+    }
+  });
+
+  app.post("/api/admin/profile/picture", requireAdmin, (req: Request, res: Response) => {
+    profileUpload.single("profilePicture")(req, res, async (err) => {
+      if (err) {
+        return res.status(400).json({ message: err.message || "Erro no upload" });
+      }
+
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ message: "Nenhum ficheiro selecionado" });
+      }
+
+      const adminId = req.session.adminId!;
+      const admin = await storage.getAdminById(adminId);
+
+      if (admin?.profilePicture) {
+        const oldPath = path.join(UPLOAD_DIR, admin.profilePicture);
+        if (fs.existsSync(oldPath)) {
+          fs.unlinkSync(oldPath);
+        }
+      }
+
+      const updated = await storage.updateAdmin(adminId, { profilePicture: file.filename });
+      if (!updated) {
+        return res.status(500).json({ message: "Erro ao atualizar foto" });
+      }
+
+      res.json({ admin: { id: updated.id, username: updated.username, profilePicture: updated.profilePicture, role: updated.role } });
+    });
+  });
+
+  app.delete("/api/admin/profile/picture", requireAdmin, async (req: Request, res: Response) => {
+    const adminId = req.session.adminId!;
+    const admin = await storage.getAdminById(adminId);
+
+    if (admin?.profilePicture) {
+      const oldPath = path.join(UPLOAD_DIR, admin.profilePicture);
+      if (fs.existsSync(oldPath)) {
+        fs.unlinkSync(oldPath);
+      }
+    }
+
+    const updated = await storage.updateAdmin(adminId, { profilePicture: null });
+    if (!updated) {
+      return res.status(500).json({ message: "Erro ao remover foto" });
+    }
+
+    res.json({ admin: { id: updated.id, username: updated.username, profilePicture: updated.profilePicture, role: updated.role } });
+  });
+
   app.delete("/api/admin/images/:id", requireAdmin, async (req: Request, res: Response) => {
     const id = req.params.id as string;
     const image = await storage.getImageById(id);
@@ -230,6 +443,107 @@ export async function registerRoutes(
 
     await storage.deleteImage(id);
     res.json({ ok: true });
+  });
+
+  // Master admin routes
+  app.get("/api/master/admins", requireMaster, async (_req, res) => {
+    const allAdmins = await storage.getAllAdmins();
+    res.json(allAdmins.map(a => ({ id: a.id, username: a.username, profilePicture: a.profilePicture, role: a.role })));
+  });
+
+  app.post("/api/master/admins", requireMaster, async (req, res) => {
+    try {
+      const data = createAdminSchema.parse(req.body);
+      const existing = await storage.getAdminByUsername(data.username);
+      if (existing) {
+        return res.status(409).json({ message: "Este nome de usuario ja esta em uso" });
+      }
+      const admin = await storage.createAdmin({ username: data.username, password: data.password, role: "admin" });
+      res.json({ id: admin.id, username: admin.username, profilePicture: admin.profilePicture, role: admin.role });
+    } catch (err: any) {
+      if (err.issues) {
+        return res.status(400).json({ message: err.issues[0]?.message || "Dados invalidos" });
+      }
+      res.status(500).json({ message: "Erro interno" });
+    }
+  });
+
+  app.put("/api/master/admins/:id", requireMaster, async (req: Request, res: Response) => {
+    try {
+      const id = req.params.id as string;
+      const admin = await storage.getAdminById(id);
+      if (!admin) {
+        return res.status(404).json({ message: "Admin nao encontrado" });
+      }
+
+      const schema = z.object({
+        username: z.string().min(1).optional(),
+        password: z.string().min(4).optional(),
+      });
+      const data = schema.parse(req.body);
+
+      if (data.username) {
+        const existing = await storage.getAdminByUsername(data.username);
+        if (existing && existing.id !== id) {
+          return res.status(409).json({ message: "Este nome de usuario ja esta em uso" });
+        }
+      }
+
+      const updated = await storage.updateAdmin(id, data);
+      if (!updated) {
+        return res.status(500).json({ message: "Erro ao atualizar admin" });
+      }
+      res.json({ id: updated.id, username: updated.username, profilePicture: updated.profilePicture, role: updated.role });
+    } catch (err: any) {
+      if (err.issues) {
+        return res.status(400).json({ message: err.issues[0]?.message || "Dados invalidos" });
+      }
+      res.status(500).json({ message: "Erro interno" });
+    }
+  });
+
+  app.delete("/api/master/admins/:id", requireMaster, async (req: Request, res: Response) => {
+    const id = req.params.id as string;
+    const admin = await storage.getAdminById(id);
+    if (!admin) {
+      return res.status(404).json({ message: "Admin nao encontrado" });
+    }
+    if (admin.role === "master") {
+      return res.status(403).json({ message: "Nao e possivel eliminar o admin master" });
+    }
+    await storage.deleteAdmin(id);
+    res.json({ ok: true });
+  });
+
+  // Master: generate report manually
+  app.post("/api/master/report", requireMaster, async (_req, res) => {
+    try {
+      await generateDailyReport();
+      res.json({ ok: true, message: "Relatorio gerado com sucesso" });
+    } catch (err) {
+      res.status(500).json({ message: "Erro ao gerar relatorio" });
+    }
+  });
+
+  // Master: list reports
+  app.get("/api/master/reports", requireMaster, async (_req, res) => {
+    try {
+      const files = fs.readdirSync(DATA_DIR).filter(f => f.endsWith(".txt")).sort().reverse();
+      res.json(files);
+    } catch (err) {
+      res.json([]);
+    }
+  });
+
+  // Master: download report
+  app.get("/api/master/reports/:filename", requireMaster, async (req: Request, res: Response) => {
+    const filename = path.basename(req.params.filename as string);
+    const filePath = path.join(DATA_DIR, filename);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ message: "Relatorio nao encontrado" });
+    }
+    const content = fs.readFileSync(filePath, "utf-8");
+    res.json({ filename, content });
   });
 
   return httpServer;
